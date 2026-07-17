@@ -1,0 +1,2 @@
+assembler = "nasm"
+instruction_set = "x86"
