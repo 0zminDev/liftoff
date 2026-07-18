@@ -10,10 +10,10 @@ jmp short start
 nop
 
 bdb_oem:                    db 'MSWIN4.1'           ; 8 B
-bdb_bytes_per_sector:      dw 512
+bdb_bytes_per_sector:       dw 512
 bdb_sectors_per_cluster:    db 1 
 bdb_reserved_sectors:       dw 1 
-bdb_fat_count:              dw 2 
+bdb_fat_count:              db 2 
 bdb_dir_entries_count:      dw 0E0h
 bdb_total_sectors:          dw 2880                 ; * 512 = 1440k whole floppy 
 bdb_media_descriptor_type:  db 0F0h                 ; indicates floppy disk 3.5'
@@ -44,9 +44,9 @@ puts:
     push bx
 
 .loop:
-    lodsb               ; loads next byte from ds:si in al 
-    or  al, al          ; dos nothing to al but does sets up zero flag if its zero so we know if its null
-    jz .done            ; if zero is set then return
+    lodsb                                           ; loads next byte from ds:si in al 
+    or  al, al                                      ; dos nothing to al but does sets up zero flag if its zero so we know if its null
+    jz .done                                        ; if zero is set then return
 
     ; so now we need interrupt to write to monitor we use int 0x10 viedo interupt with ah = 0eh print
     ; chars in TTY mode al is the charachter which we alrady have bh is text mode and bl is pixel color which we
@@ -56,7 +56,7 @@ puts:
     mov bh, 0
     int 0x10
 
-    jmp .loop           ; else go to the start of the loop
+    jmp .loop                                       ; else go to the start of the loop
 
 .done:
     ; take stack variables back then return
@@ -67,9 +67,9 @@ puts:
 
 main:
     ; setup data segments
-    mov ax, 0           ; can't write directly to ds/es in 16 bits
-    mov ds, ax          ; data segment
-    mov es, ax          ; extera segment
+    mov ax, 0                                       ; can't write directly to ds/es in 16 bits
+    mov ds, ax                                      ; data segment
+    mov es, ax                                      ; extera segment
     
     ; setup stack 
     mov ss, ax
@@ -78,9 +78,9 @@ main:
     ; read something 
     mov [ebr_drive_number], dl 
 
-    mov ax, 1                   ; LBA = 1, second sector of disk 
-    mov cl, 1                   ; 1 sector to read 
-    mov bx, 0x7E00              ; place it after bootloader 
+    mov ax, 1                                       ; LBA = 1, second sector of disk 
+    mov cl, 1                                       ; 1 sector to read 
+    mov bx, 0x7E00                                  ; place it after bootloader 
     call disk_read 
 
     ; prints hello world
@@ -89,6 +89,7 @@ main:
     
     cli
     hlt
+
 ;
 ; Error handlers
 ;
@@ -99,11 +100,11 @@ floppy_error:
 
 wait_key_and_reboot:
     mov ah, 0 
-    int 16h                  ; wait for key press 
-    jmp 0FFFFh:0             ; jump to BIOS which should reboot it 
+    int 16h                                         ; wait for key press 
+    jmp 0FFFFh:0                                    ; jump to BIOS which should reboot it 
 
 .halt:
-    cli                     ; disable interrupts 
+    cli                                             ; disable interrupts 
     hlt 
 ;
 ; Disk routines 
@@ -123,22 +124,22 @@ lba_to_chs:
     push ax
     push dx
 
-    xor dx, dx          ; clear dx
+    xor dx, dx                                      ; clear dx
 
     ; NOTE theoretically we could have here 18 hardcoded
-    div word [bdb_sectors_per_track]    ; ax = LBA/SectorsPerTrack
-                                        ; dx = LBA % SectorsPerTrack 
-    inc dx                              ; dx = (LBA % SectorsPerTrack) = 1 = sector 
+    div word [bdb_sectors_per_track]                ; ax = LBA/SectorsPerTrack
+                                                    ; dx = LBA % SectorsPerTrack 
+    inc dx                                          ; dx = (LBA % SectorsPerTrack) = 1 = sector 
     mov cx, dx 
 
     xor dx, dx 
 
     ;NOTE and here insted of div just bit shift as heads are 2 bit for now its fine
-    div word [bdb_heads]                ; ax = (LBA/SectorsPerTrack)/Heads = cylinder
-                                        ; dx  = (LBa/SectorsPerTRack)%Heads = head
+    div word [bdb_heads]                            ; ax = (LBA/SectorsPerTrack)/Heads = cylinder
+                                                    ; dx  = (LBa/SectorsPerTRack)%Heads = head
     mov dh, dl
     mov ch, al 
-    shl ah, 6                           ; do this like that to prevent Partial Register Stall 
+    shl ah, 6                                       ; do this like that to prevent Partial Register Stall 
     or cl, ah
 
     pop ax 
@@ -211,16 +212,16 @@ disk_reset:
     mov ah, 0
     stc 
     int 13h 
-    jc floppy_error 
+    jc floppy_error     
     popa 
-    ret 
+    ret         
 
-msg_hello:                  db 'Hello World!', ENDL, 0
-msg_read_failed:            db 'Disk read failed.', ENDL, 0
+msg_hello:          db 'Hello World!', ENDL, 0
+msg_read_failed:    db 'Disk read failed.', ENDL, 0
 
 ; NOTE: both org times and dw are directives not intructions
-times 510-($-$$) db 0   ; move though ram sector till the end write 0 everywhere
-dw 0AA55h               ; set directive for bios
+times 510-($-$$) db 0                               ; move though ram sector till the end write 0 everywhere
+dw 0AA55h                                           ; set directive for bios
 
 ; segment:[bsae + index + displacement]
 ; segment - CS DS ES FS GS or SS
