@@ -101,6 +101,15 @@ bool readFile(DirectoryEntry *fileEntry, FILE *disk, uint8_t *bufferOut) {
 	bool ok = true;
 	uint16_t currentCluster = fileEntry->FirstClusterLow;
 
+	// so how it works is p
+	// in fat we have chains of pointers to data space of fat12 system
+	// this chain is consecutive meaning each 12B is next pointer
+	// but the pointers doesnt point to consecutive clusers they can be
+	// consecutive or not so we loop though this chain until we see te chain end
+	// indicator afte switch new file cluster chain starts and each time we get
+	// this offset and dd to the end of root dir and take cluster and stroe it
+	// additively then repeat
+
 	do {
 		uint32_t lba = g_RootDirectoryEnd +
 					   (currentCluster - 2) * g_BootSector.SectorsPerCluster;
