@@ -1,5 +1,4 @@
 #include <ctype.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,8 +48,8 @@ typedef struct {
 } __attribute__((packed)) DirectoryEntry;
 
 BootSector g_BootSector;
-uint8_t *g_Fat = NULL;
-DirectoryEntry *g_RootDirectory = NULL;
+uint8_t *g_Fat = nullptr;
+DirectoryEntry *g_RootDirectory = nullptr;
 uint32_t g_RootDirectoryEnd;
 
 bool readBootSector(FILE *disk) {
@@ -95,7 +94,7 @@ DirectoryEntry *findFile(const char *name) {
 		}
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 bool readFile(DirectoryEntry *fileEntry, FILE *disk, uint8_t *bufferOut) {
@@ -131,17 +130,20 @@ int main(int argc, char **argv) {
 	FILE *disk = fopen(argv[1], "rb");
 	if (!disk) {
 		fprintf(stderr, "Cannot open disk image %s!\n", argv[1]);
+		fclose(disk);
 		return -1;
 	}
 
 	if (!readBootSector(disk)) {
 		fprintf(stderr, "Cannot read BootSector!\n");
+		fclose(disk);
 		return -2;
 	}
 
 	if (!readFat(disk)) {
 		fprintf(stderr, "Cannot read Fat!\n");
 		free(g_Fat);
+		fclose(disk);
 		return -3;
 	}
 
@@ -149,6 +151,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Cannot read RootDirectory!\n");
 		free(g_Fat);
 		free(g_RootDirectory);
+		fclose(disk);
 		return -4;
 	}
 
@@ -157,6 +160,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Cannot find %s!\n", argv[2]);
 		free(g_Fat);
 		free(g_RootDirectory);
+		fclose(disk);
 		return -5;
 	}
 
@@ -167,6 +171,7 @@ int main(int argc, char **argv) {
 		free(g_Fat);
 		free(g_RootDirectory);
 		free(buffer);
+		fclose(disk);
 		return -6;
 	}
 
@@ -182,5 +187,6 @@ int main(int argc, char **argv) {
 	free(g_Fat);
 	free(g_RootDirectory);
 	free(buffer);
+	fclose(disk);
 	return 0;
 }
