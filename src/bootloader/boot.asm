@@ -10,10 +10,10 @@ jmp short start
 nop
 
 bdb_oem:                    db 'MSWIN4.1'           ; 8 B
-bdb_bytes_per_sector:      dw 512
+bdb_bytes_per_sector:       dw 512
 bdb_sectors_per_cluster:    db 1 
 bdb_reserved_sectors:       dw 1 
-bdb_fat_count:              dw 2 
+bdb_fat_count:              db 2 
 bdb_dir_entries_count:      dw 0E0h
 bdb_total_sectors:          dw 2880                 ; * 512 = 1440k whole floppy 
 bdb_media_descriptor_type:  db 0F0h                 ; indicates floppy disk 3.5'
@@ -31,9 +31,181 @@ ebr_volume_id:              db 21h, 37h, 42h, 00h   ; lmfao
 ebr_volume_label:           db '0zminDev0S '        ; must be 11 b
 ebr_system_id:              db 'FAT12   '           ; must be 8 B and this must be FAT12
 
-
 start:
-    jmp main
+    ; setup data segments
+    mov ax, 0                                       ; can't write directly to ds/es in 16 bits
+    mov ds, ax                                      ; data segment
+    mov es, ax                                      ; extera segment
+    
+    ; setup stack 
+    mov ss, ax
+    mov sp, 0x7C00
+    
+    ; Some BIOSes might not start at zero so we force it 
+    push es 
+    push word .after 
+    retf
+
+.after:
+    ; read something 
+    ; BIOS sets up dl to drive number
+    mov [ebr_drive_number], dl 
+
+    ; prints hello world
+    mov si, msg_loading
+    call puts
+    
+    ; read drive params instead of relying on data on formatted disk which might be fucked up for some reason 
+    push es
+    mov ah, 08h 
+    int 13h
+    jc floppy_error 
+    pop es
+
+    and cl, 0x3F                                    ; remove top 2 bits 
+    xor ch, ch 
+    mov [bdb_sectors_per_track], cx                 ; sector count 
+
+    inc dh                                          ; head count 
+    mov [bdb_heads], dh 
+    
+    ; read FAT root directory
+    mov ax, [bdb_sectors_per_fat]                   ; LBA of root dir = reserved + fats * sectors_per_fat;
+    mov bl, [bdb_fat_count]
+    xor bh, bh
+    mul bx                                          ; ax = (fats * sectors_per_fat)
+    add ax, [bdb_reserved_sectors]                  ; ax = LBA 
+    push ax                                         ; save it on stack
+
+    mov ax, [bdb_dir_entries_count]                   ; size = 32*number_of_entries/bytes-per_sector 
+    shl ax, 5                                           ; mul * 5 (2^5) 
+    xor dx, dx                                          ; clear the reprocity reg
+    div word [bdb_bytes_per_sector]
+
+    test dx, dx                                     ; id dx != 0 add 1 
+    jz .root_dir_after
+    inc ax
+
+.root_dir_after:
+    mov cl, al 
+    pop ax 
+    mov dl, [ebr_drive_number]
+    mov bx, buffer 
+    call disk_read
+
+    xor bx, bx
+    mov di, buffer
+
+.search_kernel:
+    mov si, file_kernel_bin                         ; kernel filename 
+    mov cx, 11                                      ; filename size 
+    push di
+    ; really convinient line compares 2 string bytes in memory increases them each time and repe is repeat until cx is zero and
+    ; decrease each time 
+    repe cmpsb
+    pop di
+    je .found_kernel 
+
+    add di, 32                                      ; move to next entry 
+    inc bx                                          ; increment dir checked count 
+
+    cmp bx, [bdb_dir_entries_count]
+    jl .search_kernel
+
+    jmp kernel_not_found_error
+
+.found_kernel:
+    ; save first cluster value low and high 
+    mov ax, [di + 26]                               ; di still points to this dir root entry and offset for cluster value is 26 
+    mov [kernel_cluster], ax
+
+    ; read fat 
+    mov ax, [bdb_reserved_sectors]
+    mov bx, buffer 
+    mov cl, [bdb_sectors_per_fat]
+    mov dl, [ebr_drive_number]
+    call disk_read
+
+    ; read fat chain 
+    mov bx, KERNEL_LOAD_SEGMENT
+    mov es, bx
+    mov bx, KERNEL_LOAD_OFFSET
+
+.load_kernel_loop:
+    ; read next cluster 
+    mov ax, [kernel_cluster]
+    ; HACK: change this beofre cheanging the disk from floppy_disk 
+    add ax, 31
+    mov cl, 1 
+    mov dl, [ebr_drive_number]
+    call disk_read
+
+    ; HACK: Could overflow
+    add bx, [bdb_bytes_per_sector]
+    
+    ; compute the next cluster 
+    mov ax, [kernel_cluster]
+    mov cx, 3 
+    mul cx
+    mov cx, 2 
+    div cx
+
+    mov si, buffer 
+    add si, ax 
+    mov ax, [ds:si]
+
+    or dx, dx 
+    jz .even 
+
+.odd: 
+    shr ax, 4 
+    jmp .next_cluster_after 
+
+.even:
+    and ax, 0x0FFF
+
+.next_cluster_after:
+    cmp ax, 0x0ff8                          ; end of chain 
+    jae .read_finish
+
+    mov [kernel_cluster], ax 
+    jmp .load_kernel_loop
+
+.read_finish:
+    ; load kernel 
+    mov dl, [ebr_drive_number]
+    mov ax, KERNEL_LOAD_SEGMENT
+    mov ds, ax 
+    mov es, ax 
+
+    jmp KERNEL_LOAD_SEGMENT:KERNEL_LOAD_OFFSET
+
+    jmp wait_key_and_reboot
+
+    cli
+    hlt
+
+;
+; Error handlers
+;
+floppy_error:
+    mov si, msg_read_failed 
+    call puts
+    jmp wait_key_and_reboot
+
+kernel_not_found_error:
+    mov si, msg_kernel_not_found
+    call puts
+    jmp wait_key_and_reboot
+
+wait_key_and_reboot:
+    mov ah, 0 
+    int 16h                                         ; wait for key press 
+    jmp 0FFFFh:0                                    ; jump to BIOS which should reboot it 
+
+.halt:
+    cli                                             ; disable interrupts 
+    hlt 
 
 ; Prints a string to the screen
 ; - ds:si points to string
@@ -44,9 +216,9 @@ puts:
     push bx
 
 .loop:
-    lodsb               ; loads next byte from ds:si in al 
-    or  al, al          ; dos nothing to al but does sets up zero flag if its zero so we know if its null
-    jz .done            ; if zero is set then return
+    lodsb                                           ; loads next byte from ds:si in al 
+    or  al, al                                      ; dos nothing to al but does sets up zero flag if its zero so we know if its null
+    jz .done                                        ; if zero is set then return
 
     ; so now we need interrupt to write to monitor we use int 0x10 viedo interupt with ah = 0eh print
     ; chars in TTY mode al is the charachter which we alrady have bh is text mode and bl is pixel color which we
@@ -56,7 +228,7 @@ puts:
     mov bh, 0
     int 0x10
 
-    jmp .loop           ; else go to the start of the loop
+    jmp .loop                                       ; else go to the start of the loop
 
 .done:
     ; take stack variables back then return
@@ -65,46 +237,6 @@ puts:
     pop si
     ret
 
-main:
-    ; setup data segments
-    mov ax, 0           ; can't write directly to ds/es in 16 bits
-    mov ds, ax          ; data segment
-    mov es, ax          ; extera segment
-    
-    ; setup stack 
-    mov ss, ax
-    mov sp, 0x7C00
-
-    ; read something 
-    mov [ebr_drive_number], dl 
-
-    mov ax, 1                   ; LBA = 1, second sector of disk 
-    mov cl, 1                   ; 1 sector to read 
-    mov bx, 0x7E00              ; place it after bootloader 
-    call disk_read 
-
-    ; prints hello world
-    mov si, msg_hello
-    call puts
-    
-    cli
-    hlt
-;
-; Error handlers
-;
-floppy_error:
-    mov si, msg_read_failed 
-    call puts
-    jmp wait_key_and_reboot
-
-wait_key_and_reboot:
-    mov ah, 0 
-    int 16h                  ; wait for key press 
-    jmp 0FFFFh:0             ; jump to BIOS which should reboot it 
-
-.halt:
-    cli                     ; disable interrupts 
-    hlt 
 ;
 ; Disk routines 
 ;
@@ -123,22 +255,22 @@ lba_to_chs:
     push ax
     push dx
 
-    xor dx, dx          ; clear dx
+    xor dx, dx                                      ; clear dx
 
     ; NOTE theoretically we could have here 18 hardcoded
-    div word [bdb_sectors_per_track]    ; ax = LBA/SectorsPerTrack
-                                        ; dx = LBA % SectorsPerTrack 
-    inc dx                              ; dx = (LBA % SectorsPerTrack) = 1 = sector 
+    div word [bdb_sectors_per_track]                ; ax = LBA/SectorsPerTrack
+                                                    ; dx = LBA % SectorsPerTrack 
+    inc dx                                          ; dx = (LBA % SectorsPerTrack) = 1 = sector 
     mov cx, dx 
 
     xor dx, dx 
 
     ;NOTE and here insted of div just bit shift as heads are 2 bit for now its fine
-    div word [bdb_heads]                ; ax = (LBA/SectorsPerTrack)/Heads = cylinder
-                                        ; dx  = (LBa/SectorsPerTRack)%Heads = head
+    div word [bdb_heads]                            ; ax = (LBA/SectorsPerTrack)/Heads = cylinder
+                                                    ; dx  = (LBa/SectorsPerTRack)%Heads = head
     mov dh, dl
     mov ch, al 
-    shl ah, 6                           ; do this like that to prevent Partial Register Stall 
+    shl ah, 6                                       ; do this like that to prevent Partial Register Stall 
     or cl, ah
 
     pop ax 
@@ -211,16 +343,25 @@ disk_reset:
     mov ah, 0
     stc 
     int 13h 
-    jc floppy_error 
+    jc floppy_error     
     popa 
-    ret 
+    ret         
 
-msg_hello:                  db 'Hello World!', ENDL, 0
-msg_read_failed:            db 'Disk read failed.', ENDL, 0
+msg_loading:                    db 'Loading...', ENDL, 0
+msg_read_failed:                db 'Disk read failed.', ENDL, 0
+msg_kernel_not_found:           db 'Cannot find kernel', ENDL, 0
+
+file_kernel_bin:                db 'KERNEL  BIN'
+kernel_cluster:                  dw 0
+
+KERNEL_LOAD_SEGMENT:            equ 0x2000
+KERNEL_LOAD_OFFSET:             equ 0
 
 ; NOTE: both org times and dw are directives not intructions
-times 510-($-$$) db 0   ; move though ram sector till the end write 0 everywhere
-dw 0AA55h               ; set directive for bios
+times 510-($-$$) db 0                               ; move though ram sector till the end write 0 everywhere
+dw 0AA55h                                           ; set directive for bios
+
+buffer:
 
 ; segment:[bsae + index + displacement]
 ; segment - CS DS ES FS GS or SS

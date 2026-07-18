@@ -1,0 +1,4 @@
+-xc
+-std=gnu23
+-Wall
+-I./src/tools
