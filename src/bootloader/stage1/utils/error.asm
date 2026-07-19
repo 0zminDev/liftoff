@@ -6,8 +6,8 @@ floppy_error:
     call puts
     jmp wait_key_and_reboot
 
-kernel_not_found_error:
-    mov si, msg_kernel_not_found
+stage_2_not_found_error:
+    mov si, msg_stage_2_not_found
     call puts
     jmp wait_key_and_reboot
 

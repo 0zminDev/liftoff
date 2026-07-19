@@ -14,7 +14,7 @@ lba_to_chs:
 
     xor dx, dx                                      ; clear dx
 
-    ; NOTE theoretically we could have here 18 hardcoded
+    ; NOTE: theoretically we could have here 18 hardcoded
     div word [bdb_sectors_per_track]                ; ax = LBA/SectorsPerTrack
                                                     ; dx = LBA % SectorsPerTrack 
     inc dx                                          ; dx = (LBA % SectorsPerTrack) = 1 = sector 
@@ -100,7 +100,7 @@ disk_reset:
     mov ah, 0
     stc 
     int 13h 
-    jc floppy_error     
+    jc floppy_error 
     popa 
-    ret         
+    ret  
 

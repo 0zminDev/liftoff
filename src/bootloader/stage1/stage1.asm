@@ -21,7 +21,7 @@ init:
     retf
 
 %include "main.asm"
-%include "load_kernel.asm"
+%include "load_stage_2.asm"
 
 %include "./utils/error.asm"
 

@@ -11,10 +11,6 @@ puts:
     or  al, al                                      ; dos nothing to al but does sets up zero flag if its zero so we know if its null
     jz .done                                        ; if zero is set then return
 
-    ; so now we need interrupt to write to monitor we use int 0x10 viedo interupt with ah = 0eh print
-    ; chars in TTY mode al is the charachter which we alrady have bh is text mode and bl is pixel color which we
-    ; doesnt have in this mode returns nothing 7 8 a and d are control codes in al 
-    
     mov ah, 0x0E
     mov bh, 0
     int 0x10

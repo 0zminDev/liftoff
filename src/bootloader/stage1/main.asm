@@ -9,7 +9,7 @@
     push es
     mov ah, 08h 
     int 13h
-    jc floppy_error 
+    jc floppy_error
     pop es
     
     ; cx contains both sectors_per_track and plater count (whic will always be 1 so we erase this data which is useless)
