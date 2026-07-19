@@ -1,0 +1,89 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ["**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Runs on every branch: proves the bootloader/kernel/image still build.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm dosfstools mtools
+
+      - name: Build
+        run: make
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 0dos-build-${{ github.sha }}
+          path: |
+            build/main_floppy.img
+            build/stage1.bin
+            build/stage2.bin
+            build/kernel.bin
+          retention-days: 7
+
+  # Only on master: cut a new version tag and publish a GitHub Release.
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: 0dos-build-${{ github.sha }}
+          path: build
+
+      - name: Compute next version
+        id: version
+        run: |
+          latest="$(git tag --list 'v*.*.*' | sort -V | tail -n1)"
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            IFS='.' read -r major minor patch <<< "${latest#v}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "Next version: $next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Tag release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "0DOS ${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: |
+            build/main_floppy.img
+            build/stage1.bin
+            build/stage2.bin
+            build/kernel.bin
