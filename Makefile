@@ -1,5 +1,7 @@
 ASM = nasm
 CC = gcc
+CC16 = ~/tools/watcom/binl64/wcc 
+LD16 = ~/tools/watcom/binl64/wlink
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -53,4 +55,7 @@ always:
 # Clean
 #
 clean:
-	rm -rf $(BUILD_DIR)/*
+	$(MAKE) -C $(SRC_DIR)/bootloader/stage1 BUILD_DIR=$(abspath $(BUILD_DIR)) clean
+	$(MAKE) -C $(SRC_DIR)/bootloader/stage2 BUILD_DIR=$(abspath $(BUILD_DIR)) clean
+	$(MAKE) -C $(SRC_DIR)/kernel BUILD_DIR=$(abspath $(BUILD_DIR)) clean
+	rm -rf $(BUILD_DIR)/*	

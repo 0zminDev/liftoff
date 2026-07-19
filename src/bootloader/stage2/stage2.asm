@@ -35,4 +35,4 @@ puts:
     pop si
     ret
 
-msg_hello: db 'Hello World from Kernel!', ENDL, 0
+msg_hello: db 'Hello World from Stage2!', ENDL, 0

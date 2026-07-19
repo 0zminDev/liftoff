@@ -1,6 +1,13 @@
 
 BUILD_DIR ?= build/
 ASM ?= nasm
+CC16 ?= ~/tools/watcom/binl64/wcc 
+LD16 ?= ~/tools/watcom/binl64/wlink
+
+SOURCES = $(wildcard *.c)
+SOURCES_ASM = $(wildcard *.asm)
+
+OBJECTS_C = $(patsubst *.c ) 
 
 .PHONY: all clean 
 
