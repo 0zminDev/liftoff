@@ -118,6 +118,17 @@ bool readFile(DirectoryEntry *fileEntry, FILE *disk, uint8_t *bufferOut) {
 		bufferOut +=
 			g_BootSector.SectorsPerCluster * g_BootSector.BytesPerSector;
 
+		// so we have 12 bit addresses in fat chain
+		// and thay look like this 0xAAA and 0xBBB so in mem thay will lokk like
+		// this (little endian so we read backwards) aa ba bb so in bin:
+		// 10101010 10111010 10111011 xxxxxxxx = DWORD
+		// and so depending on where weve started (where the chain stareted
+		// imagine we have kernel as second file and the first file has 3
+		// secotrs) we do the logic take word and if its even we take the last
+		// 12 bits because we are having whole word just cut the word and we
+		// have cluster 0xAAA so we need flip since its little endian 10111010
+		// 10101010 & 00001111 11111111 = 0xAAA and if we are odd then we just
+		// move 4 bits right so we have 10101011 10111011 >> 4 = 0xBBB
 		uint32_t fatIndex = currentCluster * 3 / 2;
 		if (currentCluster % 2 == 0) {
 			currentCluster = (*(uint16_t *)(g_Fat + fatIndex)) & 0x0FFF;
