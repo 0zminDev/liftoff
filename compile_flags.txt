@@ -1,4 +1,4 @@
 -xc
--std=gnu23
+-std=gnu99
 -Wall
 -I./src/tools

@@ -1,38 +1,22 @@
+bits 16 
 
-org 0x0              ; 0ffset to 7c00
-bits 16                 ; setup 16 bits mode
+section _ENTRY class=CODE 
 
-%define ENDL 0x0D, 0x0A
+extern _cstart_
+global entry 
 
-start:
-    mov si, msg_hello
-    call puts
+entry:
+    cli
+    mov ax, dx 
+    mov ss, ax 
+    mov sp, 0 
+    mov bp, sp 
+    sti 
 
-.halt:
+    ; boot drive in dl so we send it as argument to main c function
+    xor dh, dh
+    push dx 
+    call _cstart_ 
+
     cli 
     hlt 
-    jmp .halt 
-
-; Prints a string to the screen
-; - ds:si points to string
-puts:
-    push si
-    push ax
-
-.loop:
-    lodsb               
-    or  al, al          
-    jz .done            
-    
-    mov ah, 0x0E
-    mov bh, 0
-    int 0x10
-
-    jmp .loop           
-
-.done:
-    pop ax
-    pop si
-    ret
-
-msg_hello: db 'Hello World from Stage2!', ENDL, 0
