@@ -1,7 +1,7 @@
 ASM = nasm
 CC = gcc
-CC16 = ~/tools/watcom/binl64/wcc 
-LD16 = ~/tools/watcom/binl64/wlink
+CC16 ?= wcc
+LD16 ?= wlink
 
 SRC_DIR = src
 BUILD_DIR = build

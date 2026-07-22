@@ -8,6 +8,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Open Watcom doesn't publish numbered releases, only rolling monthly tags
+  # ("YYYY-MM-DD-Build") plus a floating "Current-build" — pin to a dated tag
+  # and verify its checksum so CI doesn't break underneath us.
+  OPENWATCOM_TAG: 2026-07-13-Build
+  OPENWATCOM_SHA256: f9b7daf209d17839e9b9c6fb602d69c6cfe7974681c5e7090a9473bd77517c57
+
 jobs:
   # Runs on every branch: proves the bootloader/kernel/image still build.
   build:
@@ -19,7 +26,31 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y nasm dosfstools mtools
+          sudo apt-get install -y nasm dosfstools mtools p7zip-full
+
+      - name: Cache Open Watcom
+        id: cache-watcom
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/watcom
+          key: open-watcom-linux-x64-${{ env.OPENWATCOM_TAG }}
+
+      - name: Install Open Watcom (16-bit C toolchain)
+        if: steps.cache-watcom.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o ow-installer \
+            "https://github.com/open-watcom/open-watcom-v2/releases/download/${OPENWATCOM_TAG}/open-watcom-2_0-c-linux-x64"
+          echo "${OPENWATCOM_SHA256}  ow-installer" | sha256sum -c -
+          mkdir -p "${{ runner.temp }}/watcom"
+          # The "installer" is really just a self-extracting 7z archive.
+          7z x ow-installer -o"${{ runner.temp }}/watcom" -y
+          chmod +x "${{ runner.temp }}/watcom"/binl64/*
+          rm ow-installer
+
+      - name: Add Open Watcom to PATH
+        run: |
+          echo "${{ runner.temp }}/watcom/binl64" >> "$GITHUB_PATH"
+          echo "WATCOM=${{ runner.temp }}/watcom" >> "$GITHUB_ENV"
 
       - name: Build
         run: make

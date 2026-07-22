@@ -4,7 +4,7 @@ BUILD_DIR ?= build/
 ASM ?= nasm
 ASMFLAGS ?= -f obj
 
-CC16 ?= ~/tools/watcom/binl64/wcc
+CC16 ?= wcc
 
 #  -4 compatible with oldest possible cpu instructions only 
 #  -d3 cenerated more symbols for debbuging 
@@ -15,7 +15,7 @@ CC16 ?= ~/tools/watcom/binl64/wcc
 #  -zq only show warning and error 
 CC16FLAGS ?= -4 -d3 -s -wx -ms -zl -zq 
 
-LD16 ?= ~/tools/watcom/binl64/wlink
+LD16 ?= wlink
 
 SOURCES_C = $(wildcard *.c)
 SOURCES_ASM = $(wildcard *.asm)
