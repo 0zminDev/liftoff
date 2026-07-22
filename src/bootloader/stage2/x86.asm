@@ -10,6 +10,39 @@ section _TEXT class=CODE
 ; caller must save eax ecx and edx and the rest by function 
 ; function mangled with a_ 
 ;
+; performs long division in 16 bits 
+;
+global _x86_div64_32:
+_x86_div64_32:
+    push bp
+    mov bp, sp 
+
+    push bx
+    
+    ; divisior ecx divident eax (upper 32 bits)
+    mov eax, [bp + 8]
+    mov ecx, [bp + 12]
+    xor edx, edx 
+
+    div ecx             ; eax quotient edx remainer 
+    
+    mov bx, [bp + 16]   ; take the result 
+    mov [bx + 4], eax 
+
+    mov eax, [bp + 4]
+    div ecx
+
+    mov [bx], eax 
+    mov bx, [bp + 18]
+    mov [bx], edx 
+
+    pop bx
+
+    mov sp, bp
+    pop bp
+    ret
+
+;
 ; Writes char to video 
 ;
 ; args: character, page 
