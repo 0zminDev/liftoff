@@ -1,2 +1,3 @@
 /build/*
-!/build/.gitkeep
+*.err
+/build/.gitkeep
