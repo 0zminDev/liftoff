@@ -1,0 +1,120 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ["**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Open Watcom doesn't publish numbered releases, only rolling monthly tags
+  # ("YYYY-MM-DD-Build") plus a floating "Current-build" — pin to a dated tag
+  # and verify its checksum so CI doesn't break underneath us.
+  OPENWATCOM_TAG: 2026-07-13-Build
+  OPENWATCOM_SHA256: f9b7daf209d17839e9b9c6fb602d69c6cfe7974681c5e7090a9473bd77517c57
+
+jobs:
+  # Runs on every branch: proves the bootloader/kernel/image still build.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm dosfstools mtools p7zip-full
+
+      - name: Cache Open Watcom
+        id: cache-watcom
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/watcom
+          key: open-watcom-linux-x64-${{ env.OPENWATCOM_TAG }}
+
+      - name: Install Open Watcom (16-bit C toolchain)
+        if: steps.cache-watcom.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o ow-installer \
+            "https://github.com/open-watcom/open-watcom-v2/releases/download/${OPENWATCOM_TAG}/open-watcom-2_0-c-linux-x64"
+          echo "${OPENWATCOM_SHA256}  ow-installer" | sha256sum -c -
+          mkdir -p "${{ runner.temp }}/watcom"
+          # The "installer" is really just a self-extracting 7z archive.
+          7z x ow-installer -o"${{ runner.temp }}/watcom" -y
+          chmod +x "${{ runner.temp }}/watcom"/binl64/*
+          rm ow-installer
+
+      - name: Add Open Watcom to PATH
+        run: |
+          echo "${{ runner.temp }}/watcom/binl64" >> "$GITHUB_PATH"
+          echo "WATCOM=${{ runner.temp }}/watcom" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: make
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 0dos-build-${{ github.sha }}
+          path: |
+            build/main_floppy.img
+            build/stage1.bin
+            build/stage2.bin
+            build/kernel.bin
+          retention-days: 7
+
+  # Only on master: cut a new version tag and publish a GitHub Release.
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: 0dos-build-${{ github.sha }}
+          path: build
+
+      - name: Compute next version
+        id: version
+        run: |
+          latest="$(git tag --list 'v*.*.*' | sort -V | tail -n1)"
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            IFS='.' read -r major minor patch <<< "${latest#v}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "Next version: $next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Tag release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "0DOS ${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: |
+            build/main_floppy.img
+            build/stage1.bin
+            build/stage2.bin
+            build/kernel.bin

@@ -1,0 +1,7 @@
+-xc
+-std=gnu99
+-Wall
+-I./src/tools
+-ffreestanding
+-fno-builtin
+-nostdlib
